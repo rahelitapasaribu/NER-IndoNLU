@@ -32,11 +32,11 @@ def token2features(tokens, i):
         "bias": 1.0,
         "word.lower": word.lower(),
 
-        "prefix2": word[:2],
-        "prefix3": word[:3],
+        "prefix2": word[:2].lower(),
+        "prefix3": word[:3].lower(),
 
-        "suffix2": word[-2:],
-        "suffix3": word[-3:],
+        "suffix2": word[-2:].lower(),
+        "suffix3": word[-3:].lower(),
 
         "is_upper": word.isupper(),
         "is_title": word.istitle(),
