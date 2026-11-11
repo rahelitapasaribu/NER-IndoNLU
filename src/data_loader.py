@@ -8,7 +8,8 @@ BASE_URL = (
 FILES = {
     "train": "train_preprocess.txt",
     "validation": "valid_preprocess.txt",
-    "test": "test_preprocess_masked_label.txt"
+    "test": "test_preprocess.txt",
+    "test_masked": "test_preprocess_masked_label.txt",
 }
 
 def download_split(split):
