@@ -1,4 +1,3 @@
-
 def normalize_bio(labels):
     """
     Menormalisasi urutan BIO.
