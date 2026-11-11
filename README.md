@@ -163,10 +163,6 @@ Untuk tiap split: `train`, `validation`, dan `test`.
 - Kode ditulis untuk eksperimen NER bahasa Indonesia dan cocok untuk pengembangan lebih lanjut seperti hyperparameter tuning, error analysis, atau deployment model.
 - Proyek ini bersifat penelitian/eksperimen; struktur kode masih dapat disesuaikan untuk kebutuhan produksi.
 
-## Lisensi
-
-Repositori ini tidak mencantumkan lisensi khusus di file terpisah. Jika Anda akan menggunakan proyek ini untuk kebutuhan komersial atau publik, pastikan untuk menyesuaikan lisensi sesuai kebijakan dataset dan dependency yang digunakan.
-
 ## Referensi
 
 - IndoNLU dataset untuk NERP
