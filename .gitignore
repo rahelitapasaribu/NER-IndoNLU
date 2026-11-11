@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Jupyter / notebooks
+.ipynb_checkpoints/
+
+# Model / dataset artifacts
+# models/**/*.joblib
+# models/**/*.bin
+# models/**/*.safetensors
+# models/**/*.json
+# results/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/editor
+.vscode/
+.idea/
+
+# Logs and temp files
+*.log
+*.tmp
+*.bak
