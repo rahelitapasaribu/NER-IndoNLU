@@ -46,6 +46,10 @@ NER-IndoNLU/
 │       └── training_args.bin
 ├── results/
 │   └── crf/
+│   |   ├── error_analysis.csv
+│   |   ├── test_results.csv
+│   |   └── validation_results.csv
+│   └── transformer/
 │       ├── error_analysis.csv
 │       ├── test_results.csv
 │       └── validation_results.csv
@@ -140,6 +144,12 @@ python src/train_transformer.py
 ```
 
 Model yang dihasilkan akan disimpan pada direktori `models/transformers/`.
+
+Hasil eksperimen disimpan di:
+
+- `results/transformer/validation_results.csv`
+- `results/transformer/test_results.csv`
+- `results/transformer/error_analysis.csv`
 
 ## Evaluasi dan analisis hasil
 
