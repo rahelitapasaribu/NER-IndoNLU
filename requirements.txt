@@ -3,7 +3,7 @@ pandas
 numpy
 torch
 transformers
-scikit-learn-crfsuite
+sklearn-crfsuite==0.5.0
 joblib
 requests
 protobuf
