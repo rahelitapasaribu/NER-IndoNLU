@@ -1,5 +1,5 @@
 from pprint import pprint
-from data_loader import load_dataset
+from src.data_loader import load_dataset
 
 
 def word_shape(word):

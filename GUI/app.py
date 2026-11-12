@@ -1,9 +1,23 @@
+import sys
+from pathlib import Path
 
+# Menambahkan root project ke Python path
+BASE_DIR = Path(__file__).resolve().parents[1]
+
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 import streamlit as st
 import pandas as pd
-import re
 import html
+
 from collections import Counter
+import textwrap
+
+from src.inference.ner_service import (
+    load_selected_model,
+    predict_entities
+)
+
 
 # ==========================================
 # PAGE CONFIG
@@ -15,6 +29,16 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+# ==========================================
+# MODEL LOADING
+# ==========================================
+
+@st.cache_resource
+def get_loaded_model(model_name):
+    return load_selected_model(model_name)
+
 
 # ==========================================
 # SESSION STATE
@@ -29,6 +53,10 @@ if "entities" not in st.session_state:
 if "analyzed_text" not in st.session_state:
     st.session_state.analyzed_text = ""
 
+if "analyzed_model" not in st.session_state:
+    st.session_state.analyzed_model = None
+
+
 # ==========================================
 # ENTITY COLORS
 # ==========================================
@@ -40,6 +68,7 @@ ENTITY_COLORS = {
     "Event": ("#FBF0E2", "#A36D32"),
     "Food/Beverage": ("#F8E9ED", "#A25470")
 }
+
 
 # ==========================================
 # CUSTOM CSS
@@ -215,6 +244,72 @@ hr {
 
 
 # ==========================================
+# HIGHLIGHT FUNCTION
+# ==========================================
+
+def render_highlight(text, entities):
+
+    matches = []
+
+    for item in entities:
+
+        start = item["start"]
+        end = item["end"]
+
+        # Validasi posisi karakter
+        if start < 0 or end > len(text) or start >= end:
+            continue
+
+        matches.append({
+            "start": start,
+            "end": end,
+            "type": item["type"],
+            "entity": text[start:end]
+        })
+
+    # Mengurutkan berdasarkan posisi karakter
+    matches.sort(
+        key=lambda x: (x["start"], -(x["end"] - x["start"]))
+    )
+
+    # Menghindari highlight yang saling tumpang tindih
+    filtered = []
+    last_end = -1
+
+    for match in matches:
+
+        if match["start"] >= last_end:
+            filtered.append(match)
+            last_end = match["end"]
+
+    output = []
+    current = 0
+
+    for match in filtered:
+
+        output.append(
+            html.escape(text[current:match["start"]])
+        )
+
+        bg, color = ENTITY_COLORS.get(
+            match["type"],
+            ("#EEEEEE", "#333333")
+        )
+
+        output.append(
+            f'<span style="background:{bg};color:{color};'
+            f'padding:3px 6px;border-radius:4px;font-weight:600;">'
+            f'{html.escape(match["entity"])}</span>'
+        )
+
+        current = match["end"]
+
+    output.append(html.escape(text[current:]))
+
+    return "".join(output)
+
+
+# ==========================================
 # SIDEBAR
 # ==========================================
 
@@ -329,6 +424,7 @@ examples = {
         "Presiden Joko Widodo menghadiri Festival Budaya "
         "di Jakarta bersama sejumlah pejabat pemerintah."
     ),
+
     "Example 2": (
         "Festival Kuliner Nusantara diselenggarakan di "
         "Bali. Pengunjung dapat menikmati nasi goreng "
@@ -354,7 +450,11 @@ if example != "Choose an example":
 
         st.session_state.news_text = examples[example]
         st.session_state.entities = None
+        st.session_state.analyzed_text = ""
+        st.session_state.analyzed_model = None
+
         st.rerun()
+
 
 news_text = st.text_area(
     "Article content",
@@ -367,6 +467,7 @@ news_text = st.text_area(
 col_info, col_button = st.columns([3, 1])
 
 with col_info:
+
     st.caption(
         f"{len(news_text.split())} words · {len(news_text)} characters"
     )
@@ -380,7 +481,7 @@ with col_button:
 
 
 # ==========================================
-# DUMMY INFERENCE
+# REAL MODEL INFERENCE
 # ==========================================
 
 if analyze:
@@ -391,87 +492,41 @@ if analyze:
 
     else:
 
-        # DEMO ONLY
-        # Replace this section with actual model inference later.
+        # Bersihkan hasil analisis sebelumnya
+        st.session_state.entities = None
+        st.session_state.analyzed_text = ""
+        st.session_state.analyzed_model = None
 
-        demo_entities = [
-            {"entity": "Joko Widodo", "type": "Person"},
-            {"entity": "Festival Budaya", "type": "Event"},
-            {"entity": "Jakarta", "type": "Location"}
-        ]
+        try:
 
-        # Keep only entities that actually appear in the input.
-        detected = []
-
-        for item in demo_entities:
-
-            if re.search(
-                re.escape(item["entity"]),
-                news_text,
-                flags=re.IGNORECASE
+            with st.spinner(
+                f"Analyzing article using {model_choice}..."
             ):
-                detected.append(item)
 
-        st.session_state.entities = detected
-        st.session_state.analyzed_text = news_text
+                # Memuat model terpilih
+                loaded_model = get_loaded_model(model_choice)
 
+                # Melakukan prediksi entitas
+                detected = predict_entities(
+                    model_name=model_choice,
+                    text=news_text,
+                    loaded_model=loaded_model
+                )
 
-# ==========================================
-# HIGHLIGHT FUNCTION
-# ==========================================
+            # Menyimpan hasil prediksi
+            st.session_state.entities = detected
+            st.session_state.analyzed_text = news_text
+            st.session_state.analyzed_model = model_choice
 
-def render_highlight(text, entities):
+            st.success(
+                f"Analysis completed using {model_choice}."
+            )
 
-    matches = []
+        except Exception as error:
 
-    for item in entities:
-
-        pattern = re.compile(
-            re.escape(item["entity"]),
-            flags=re.IGNORECASE
-        )
-
-        for match in pattern.finditer(text):
-
-            matches.append({
-                "start": match.start(),
-                "end": match.end(),
-                "type": item["type"],
-                "entity": match.group()
-            })
-
-    # Avoid overlapping spans
-    matches.sort(key=lambda x: (x["start"], -(x["end"] - x["start"])))
-
-    filtered = []
-    last_end = -1
-
-    for match in matches:
-
-        if match["start"] >= last_end:
-            filtered.append(match)
-            last_end = match["end"]
-
-    output = []
-    current = 0
-
-    for match in filtered:
-
-        output.append(html.escape(text[current:match["start"]]))
-
-        bg, color = ENTITY_COLORS[match["type"]]
-
-        output.append(
-            f'<span style="background:{bg};color:{color};'
-            f'padding:3px 6px;border-radius:4px;font-weight:600;">'
-            f'{html.escape(match["entity"])}</span>'
-        )
-
-        current = match["end"]
-
-    output.append(html.escape(text[current:]))
-
-    return "".join(output)
+            st.error(
+                f"An error occurred during analysis: {error}"
+            )
 
 
 # ==========================================
@@ -481,6 +536,7 @@ def render_highlight(text, entities):
 if st.session_state.entities is not None:
 
     entities = st.session_state.entities
+    analyzed_model = st.session_state.analyzed_model
 
     st.divider()
 
@@ -496,12 +552,13 @@ if st.session_state.entities is not None:
         unsafe_allow_html=True
     )
 
-    st.info(
-        "Demo mode: displayed results are illustrative, "
-        "not predictions from the trained model."
+    st.caption(
+        f"Prediction generated using {analyzed_model} model."
     )
 
+    # ======================================
     # METRICS
+    # ======================================
 
     counts = Counter(
         item["type"] for item in entities
@@ -512,7 +569,7 @@ if st.session_state.entities is not None:
     metrics = [
         ("Total Entities", len(entities)),
         ("Entity Categories", len(counts)),
-        ("Model Selected", model_choice)
+        ("Model Selected", analyzed_model)
     ]
 
     for col, (label, value) in zip(metric_cols, metrics):
@@ -531,7 +588,9 @@ if st.session_state.entities is not None:
 
     st.write("")
 
+    # ======================================
     # TWO COLUMN RESULT
+    # ======================================
 
     left, right = st.columns([1.35, 1])
 
@@ -561,7 +620,14 @@ if st.session_state.entities is not None:
 
             df = pd.DataFrame(entities)
 
-            df.columns = ["Entity Text", "Entity Type"]
+            df = df.rename(columns={
+                "entity": "Entity Text",
+                "type": "Entity Type"
+            })
+
+            df = df[
+                ["Entity Text", "Entity Type"]
+            ]
 
             df.insert(
                 0,
@@ -577,13 +643,16 @@ if st.session_state.entities is not None:
 
         else:
 
-            st.warning(
-                "No sample entities found in this article."
+            st.info(
+                "No named entities were detected in this article."
             )
 
+    # ======================================
     # CATEGORY DISTRIBUTION
+    # ======================================
 
     st.write("")
+
     st.markdown("##### Entity Distribution")
 
     distribution_cols = st.columns(5)
@@ -607,6 +676,7 @@ if st.session_state.entities is not None:
                         font-size:11px;
                         color:#98A2B3;
                     ">{name}</div>
+
                     <div style="
                         font-size:22px;
                         font-weight:700;

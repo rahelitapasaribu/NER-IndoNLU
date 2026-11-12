@@ -81,7 +81,7 @@ source .venv/bin/activate
 # Windows (PowerShell)
 .\.venv\Scripts\Activate.ps1
 
-pip install numpy torch transformers scikit-learn sklearn-crfsuite joblib requests
+pip install numpy torch transformers scikit-learn sklearn-crfsuite joblib requests streamlit pandas
 ```
 
 ## Jalankan validasi dataset
@@ -140,6 +140,19 @@ python src/train_transformer.py
 ```
 
 Model yang dihasilkan akan disimpan pada direktori `models/transformers/`.
+
+## Menjalankan GUI
+
+GUI memuat model CRF terbaik dari `models/crf/best_crf.joblib` atau model Transformer
+dari `models/transformers/`. Pastikan kedua direktori model tersedia, lalu jalankan
+dari root proyek:
+
+```bash
+streamlit run GUI/app.py
+```
+
+Pilih model pada sidebar, masukkan teks berita bahasa Indonesia, lalu klik
+**Analyze Article** untuk melihat prediksi entitas.
 
 ## Evaluasi dan analisis hasil
 

@@ -1,7 +1,7 @@
 import unicodedata
 from torch.utils.data import Dataset
 from transformers import DataCollatorForTokenClassification
-from spans import normalize_bio
+from src.spans import normalize_bio
 
 def clean_record(record, include_labels=True):
     tokens = record["tokens"]

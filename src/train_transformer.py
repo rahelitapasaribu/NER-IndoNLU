@@ -1,6 +1,7 @@
 import os
 import numpy as np
 import torch
+from pathlib import Path
 from transformers import AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer
 from data_loader import load_dataset
 from transformer_data import NERDataset, build_collator, map_chunk_predictions
@@ -8,10 +9,11 @@ from spans import bio_to_spans, normalize_bio
 from evaluate import evaluate_spans
 from transformers import TrainerCallback
 import shutil
-from pathlib import Path
 from analyze_errors import (analyze_dataset, print_error_summary, save_error_analysis)
 
 # 1. KONFIGURASI
+BASE_DIR = Path(__file__).resolve().parent.parent
+MODEL_DIR = BASE_DIR / "models" / "transformers"
 MODEL_NAME = "indobenchmark/indobert-base-p1"
 LABEL_LIST = ["O", "B-PPL", "I-PPL", "B-PLC", "I-PLC", "B-IND", "I-IND", "B-EVT", "I-EVT", "B-FNB", "I-FNB"]
 LABEL2ID = {label: i for i, label in enumerate(LABEL_LIST)}
@@ -249,8 +251,8 @@ def run_error_analysis(trainer, test_dataset):
 trainer.train()
 
 # 9. SIMPAN MODEL TERBAIK
-trainer.save_model("model_terbaik")
-tokenizer.save_pretrained("model_terbaik")
+trainer.save_model(str(MODEL_DIR))
+tokenizer.save_pretrained(str(MODEL_DIR))
 
 # 10. EVALUASI TEST SET
 print("\n" + "=" * 60)
