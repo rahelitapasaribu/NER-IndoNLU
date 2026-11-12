@@ -46,6 +46,10 @@ NER-IndoNLU/
 │       └── training_args.bin
 ├── results/
 │   └── crf/
+│   |   ├── error_analysis.csv
+│   |   ├── test_results.csv
+│   |   └── validation_results.csv
+│   └── transformer/
 │       ├── error_analysis.csv
 │       ├── test_results.csv
 │       └── validation_results.csv
@@ -81,7 +85,7 @@ source .venv/bin/activate
 # Windows (PowerShell)
 .\.venv\Scripts\Activate.ps1
 
-pip install numpy torch transformers scikit-learn sklearn-crfsuite joblib requests streamlit pandas
+pip install numpy torch transformers scikit-learn sklearn-crfsuite joblib requests
 ```
 
 ## Jalankan validasi dataset
@@ -141,18 +145,11 @@ python src/train_transformer.py
 
 Model yang dihasilkan akan disimpan pada direktori `models/transformers/`.
 
-## Menjalankan GUI
+Hasil eksperimen disimpan di:
 
-GUI memuat model CRF terbaik dari `models/crf/best_crf.joblib` atau model Transformer
-dari `models/transformers/`. Pastikan kedua direktori model tersedia, lalu jalankan
-dari root proyek:
-
-```bash
-streamlit run GUI/app.py
-```
-
-Pilih model pada sidebar, masukkan teks berita bahasa Indonesia, lalu klik
-**Analyze Article** untuk melihat prediksi entitas.
+- `results/transformer/validation_results.csv`
+- `results/transformer/test_results.csv`
+- `results/transformer/error_analysis.csv`
 
 ## Evaluasi dan analisis hasil
 
