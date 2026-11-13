@@ -1,9 +1,12 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 streamlit==1.46.0
-pandas
-numpy
-torch
-transformers
-sklearn-crfsuite==0.5.0
+pandas==2.2.3
+numpy==1.26.4
+torch==2.5.1+cpu
+transformers==4.44.2
+scikit-learn==1.6.1
 joblib
 requests
 protobuf
+sklearn-crfsuite==0.5.0
