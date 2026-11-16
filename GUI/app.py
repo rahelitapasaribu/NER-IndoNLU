@@ -56,6 +56,9 @@ if "analyzed_text" not in st.session_state:
 if "analyzed_model" not in st.session_state:
     st.session_state.analyzed_model = None
 
+if "counts" not in st.session_state:
+    st.session_state.counts = {}
+
 
 # ==========================================
 # ENTITY COLORS
@@ -452,6 +455,7 @@ if example != "Choose an example":
         st.session_state.entities = None
         st.session_state.analyzed_text = ""
         st.session_state.analyzed_model = None
+        st.session_state.counts = {}
 
         st.rerun()
 
@@ -561,8 +565,9 @@ if st.session_state.entities is not None:
     # ======================================
 
     counts = Counter(
-        item["type"] for item in entities
-    )
+    item["type"] for item in entities)
+
+    st.session_state.counts = dict(counts)
 
     metric_cols = st.columns(3)
 
@@ -651,38 +656,41 @@ if st.session_state.entities is not None:
     # CATEGORY DISTRIBUTION
     # ======================================
 
-    st.write("")
-
     st.markdown("##### Entity Distribution")
 
     distribution_cols = st.columns(5)
+
+    normalized_counts = {
+        str(k).lower(): v
+        for k, v in counts.items()
+    }
 
     for col, (name, (bg, color)) in zip(
         distribution_cols,
         ENTITY_COLORS.items()
     ):
-
         with col:
+            count_value = normalized_counts.get(name.lower(), 0)
 
             st.markdown(
                 f"""
                 <div style="
-                    background:white;
-                    border:1px solid #EAECF0;
-                    border-radius:9px;
-                    padding:14px;
+                    background: white;
+                    border: 1px solid #EAECF0;
+                    border-radius: 9px;
+                    padding: 14px;
                 ">
+                    <div style="font-size: 11px; color: #98A2B3;">
+                        {name}
+                    </div>
                     <div style="
-                        font-size:11px;
-                        color:#98A2B3;
-                    ">{name}</div>
-
-                    <div style="
-                        font-size:22px;
-                        font-weight:700;
-                        color:{color};
-                        margin-top:5px;
-                    ">{counts.get(name, 0)}</div>
+                        font-size: 22px;
+                        font-weight: 700;
+                        color: {color};
+                        margin-top: 5px;
+                    ">
+                        {count_value}
+                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True
