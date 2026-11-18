@@ -1,0 +1,34 @@
+{
+    "model": "indobenchmark/indobert-base-p1",
+    "experiment": "with_normalization",
+    "normalization": true,
+    "max_length": 128,
+    "batch_size": 8,
+    "epochs": 3,
+    "learning_rate": 2e-05,
+    "seed": 42,
+    "training_time": 302.063797967,
+    "selection_metric": "validation_micro_span_f1",
+    "best_checkpoint": "/content/NER-IndoNLU/results/transformer/with_normalization/checkpoints/checkpoint-2523",
+    "best_validation_span_f1": 0.8068023417897966,
+    "entity_types": [
+        "PPL",
+        "PLC",
+        "IND",
+        "EVT",
+        "FNB"
+    ],
+    "bio_labels": [
+        "O",
+        "B-PPL",
+        "I-PPL",
+        "B-PLC",
+        "I-PLC",
+        "B-IND",
+        "I-IND",
+        "B-EVT",
+        "I-EVT",
+        "B-FNB",
+        "I-FNB"
+    ]
+}

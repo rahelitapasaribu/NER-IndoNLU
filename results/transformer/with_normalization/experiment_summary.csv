@@ -1,0 +1,2 @@
+experiment,normalization,training_time,validation_span_f1,test_span_precision,test_span_recall,test_span_f1,test_bio_accuracy,test_bio_macro_precision,test_bio_macro_recall,test_bio_macro_f1,test_bio_weighted_f1,test_bio_micro_f1
+with_normalization,True,302.06,0.8068023417897966,0.8143939393939394,0.847887323943662,0.8308032017664919,0.964110275689223,0.826722219180585,0.8344903863758387,0.8296436070378918,0.9644189769785856,0.964110275689223
