@@ -7,11 +7,11 @@ import csv
 
 import sklearn_crfsuite
 
-from data_loader import load_dataset
-from crf_features import sentence2features
-from spans import normalize_bio, bio_to_spans
-from evaluate import evaluate_spans, evaluate_bio, ENTITY_TYPES, BIO_LABELS
-from analyze_errors import analyze_dataset, print_error_summary, save_error_analysis
+from src.data_loader import load_dataset
+from src.crf_features import sentence2features
+from src.spans import normalize_bio, bio_to_spans
+from src.evaluate import evaluate_spans, evaluate_bio, ENTITY_TYPES, BIO_LABELS
+from src.analyze_errors import analyze_dataset, print_error_summary, save_error_analysis
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
