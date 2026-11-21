@@ -5,10 +5,10 @@ import torch
 import numpy as np
 from pathlib import Path
 from transformers import (AutoTokenizer, AutoModelForTokenClassification, TrainingArguments, Trainer, TrainerCallback)
-from data_loader import load_dataset
-from transformer_data import (NERDataset, build_collator, map_chunk_predictions)
-from spans import normalize_bio, bio_to_spans
-from evaluate import (evaluate_spans, evaluate_bio, ENTITY_TYPES, BIO_LABELS)
+from src.data_loader import load_dataset
+from src.transformer_data import (NERDataset, build_collator, map_chunk_predictions)
+from src.spans import normalize_bio, bio_to_spans
+from src.evaluate import (evaluate_spans, evaluate_bio, ENTITY_TYPES, BIO_LABELS)
 
 
 # 1. KONFIGURASI

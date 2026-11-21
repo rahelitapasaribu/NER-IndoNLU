@@ -1,7 +1,7 @@
 from pathlib import Path
 import csv
 
-from spans import bio_to_spans
+from src.spans import bio_to_spans
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
