@@ -1,14 +1,16 @@
 from pathlib import Path
+import token
+import results
 import joblib
 import time
 import csv
 
 import sklearn_crfsuite
 
-from src.data_loader import load_dataset
-from src.crf_features import sentence2features
-from src.spans import normalize_bio, bio_to_spans
-from src.evaluate import evaluate_spans, ENTITY_TYPES
+from data_loader import load_dataset
+from crf_features import sentence2features
+from spans import normalize_bio, bio_to_spans
+from evaluate import evaluate_spans, evaluate_bio, ENTITY_TYPES, BIO_LABELS
 from analyze_errors import analyze_dataset, print_error_summary, save_error_analysis
 
 
@@ -43,12 +45,7 @@ def split_xy(sentences, normalize_labels=False):
         if normalize_labels:
 
             labels = normalize_bio(original_labels)
-
-            total_changed += sum(
-                original != normalized
-                for original, normalized
-                in zip(original_labels, labels)
-            )
+            total_changed += sum(original != normalized for original, normalized in zip(original_labels, labels))
 
         features = sentence2features(tokens)
 
@@ -66,23 +63,23 @@ def split_xy(sentences, normalize_labels=False):
 
 
 def predict_evaluate(model, X, y_true):
-    """Melakukan prediksi dan evaluasi span entity berdasarkan label BIO"""
+    """Melakukan evaluasi entity-level span dan token-level BIO"""
     y_pred = model.predict(X)
 
+    """Evaluasi entity-level exact-match span"""
     true_spans = [bio_to_spans(seq) for seq in y_true]
     pred_spans = [bio_to_spans(seq) for seq in y_pred]
 
-    result = evaluate_spans(
-        true_spans,
-        pred_spans,
-        entity_types=ENTITY_TYPES
-    )
+    span_result = evaluate_spans(true_spans, pred_spans, entity_types=ENTITY_TYPES)
 
-    return y_pred, result
+    """Evaluasi token-level BIO"""
+    bio_result = evaluate_bio(y_true, y_pred)
+
+    return y_pred, span_result, bio_result
 
 
-def print_metrics(result, title):
-    """Menampilkan metrik evaluasi span entity"""
+def print_span_metrics(result, title):
+    """Menampilkan hasil evaluasi exact-match span"""
     print(f"\n{title}")
     print(
         f"{'Entity':<15}"
@@ -94,8 +91,7 @@ def print_metrics(result, title):
         f"{'FN':>8}"
     )
 
-    for entity_type in ENTITY_TYPES + ["micro_overall"]:
-
+    for entity_type in ENTITY_TYPES + ["micro_overall"]: 
         metric = result[entity_type]
 
         print(
@@ -107,6 +103,52 @@ def print_metrics(result, title):
             f"{metric['fp']:>8}"
             f"{metric['fn']:>8}"
         )
+
+
+def print_bio_metrics(result, title):
+    """Menampilkan hasil evaluasi token-level BIO"""
+    print(f"\n{title}")
+    print(
+        f"{'Label':<15}"
+        f"{'Precision':>12}"
+        f"{'Recall':>12}"
+        f"{'F1':>12}"
+        f"{'Support':>12}"
+    )
+
+    """Metrik untuk setiap label BIO"""
+    for label in BIO_LABELS:
+        if label not in result:
+            continue
+
+        metric = result[label]
+
+        print(
+            f"{label:<15}"
+            f"{metric['precision']:>12.4f}"
+            f"{metric['recall']:>12.4f}"
+            f"{metric['f1']:>12.4f}"
+            f"{metric['support']:>12}"
+        )
+
+    """Ringkasan rata-rata"""
+    for avg_name in ["macro_avg", "weighted_avg", "micro_overall"]:
+        if avg_name not in result:
+            continue
+
+        metric = result[avg_name]
+
+        print(
+            f"{avg_name:<15}"
+            f"{metric['precision']:>12.4f}"
+            f"{metric['recall']:>12.4f}"
+            f"{metric['f1']:>12.4f}"
+            f"{metric.get('support', '-'):>12}"
+        )
+
+    if "accuracy" in result:
+        print(f"\nToken Accuracy : {result['accuracy']:.4f}")
+
 
 
 """ Konfigurasi eksperimen CRF """
@@ -173,7 +215,7 @@ def build_crf(config):
 
 
 def save_experiment_results(results):
-    """"Menyimpan hasil eksperimen ke file CSV"""
+    """Menyimpan hasil eksperimen validation ke CSV"""
     output_path = RESULT_DIR / "validation_results.csv"
 
     fieldnames = [
@@ -182,28 +224,34 @@ def save_experiment_results(results):
         "c2",
         "max_iterations",
         "training_time",
-        "precision",
-        "recall",
-        "f1"
-    ]
 
+        "span_precision",
+        "span_recall",
+        "span_f1",
+
+        "bio_accuracy",
+        "bio_macro_precision",
+        "bio_macro_recall",
+        "bio_macro_f1",
+        "bio_weighted_f1",
+        "bio_micro_f1"
+    ]
+    
     with open(output_path, "w", newline="", encoding="utf-8") as file:
 
         writer = csv.DictWriter(file, fieldnames=fieldnames)
         writer.writeheader()
-
-        for result in results:
-
-            writer.writerow(result)
+        writer.writerows(results)
 
     print(f"\nHasil eksperimen disimpan: {output_path}")
 
 
 def select_best_model(X_train, y_train, X_val, y_val):
-    """Melakukan eksperimen dengan berbagai konfigurasi dan memilih model terbaik berdasarkan F1 score pada validation"""
+    """Melakukan eksperimen beberapa konfigurasi CRF. Model terbaik dipilih berdasarkan exact-match span F1 pada validation"""
     best_model = None
     best_config = None
-    best_result = None
+    best_span_result = None
+    best_bio_result = None
     best_f1 = -1.0
 
     experiment_results = []
@@ -216,8 +264,7 @@ def select_best_model(X_train, y_train, X_val, y_val):
         model = build_crf(config)
 
         start_time = time.perf_counter()
-
-        """Training hanya menggunakan train"""
+        
         model.fit(X_train, y_train)
 
         training_time = time.perf_counter() - start_time
@@ -225,14 +272,24 @@ def select_best_model(X_train, y_train, X_val, y_val):
         print(f"Waktu training: {training_time:.2f} detik")
         print("Jumlah label yang dipelajari:", len(model.classes_))
 
-        """Evaluasi menggunakan validation"""
-        _, validation_result = predict_evaluate(model, X_val, y_val)
+        """Evaluasi validation menggunakan dua pendekatan"""
+        y_pred, span_result, bio_result = predict_evaluate(model, X_val, y_val)
 
-        print_metrics(validation_result, f"HASIL VALIDASI {config['name']}")
+        print_span_metrics(span_result, f"VALIDATION EXACT-MATCH SPAN - {config['name']}")
+        print_bio_metrics(bio_result, f"VALIDATION TOKEN-LEVEL BIO - {config['name']}")
+        
+        """Simpan detail evaluasi validation setiap konfigurasi"""
+        save_span_results(span_result, f"validation_{config['name']}_span_results.csv")
+        save_bio_results(bio_result, f"validation_{config['name']}_bio_results.csv")
 
-        val_metric = validation_result["micro_overall"]
+        """Dasar pemilihan model: exact-match span F1"""
+        span_metric = span_result["micro_overall"]
+        span_f1 = span_metric["f1"]
 
-        val_f1 = val_metric["f1"]
+        """Metrik BIO untuk pencatatan eksperimen"""
+        bio_macro = bio_result.get("macro_avg", {})
+        bio_weighted = bio_result.get("weighted_avg", {})
+        bio_micro = bio_result.get("micro_overall", {})
 
         experiment_results.append({
             "experiment": config["name"],
@@ -240,39 +297,47 @@ def select_best_model(X_train, y_train, X_val, y_val):
             "c2": config["c2"],
             "max_iterations": config["max_iterations"],
             "training_time": round(training_time, 2),
-            "precision": val_metric["precision"],
-            "recall": val_metric["recall"],
-            "f1": val_f1
+
+            "span_precision": span_metric["precision"],
+            "span_recall": span_metric["recall"],
+            "span_f1": span_f1,
+
+            "bio_accuracy": bio_result.get("accuracy", 0.0),
+            "bio_macro_precision": bio_macro.get("precision", 0.0),
+            "bio_macro_recall": bio_macro.get("recall", 0.0),
+            "bio_macro_f1": bio_macro.get("f1", 0.0),
+            "bio_weighted_f1": bio_weighted.get("f1", 0.0),
+            "bio_micro_f1": bio_micro.get("f1", 0.0)
         })
 
-        print(f"\nValidation span F1: {val_f1:.4f}")
+        print(f"\nValidation Exact-match Span F1: {span_f1:.4f}")
 
-        """Memilih konfigurasi terbaik"""
-        if val_f1 > best_f1:
-
-            best_f1 = val_f1
+        """Pemilihan model hanya berdasarkan span F1"""
+        if span_f1 > best_f1:
+            best_f1 = span_f1
             best_model = model
             best_config = config.copy()
-            best_result = validation_result
+            best_span_result = span_result
+            best_bio_result = bio_result
 
-            print("Menjadi model terbaik sementara")
+            print("Menjadi model terbaik sementara.")
 
     save_experiment_results(experiment_results)
 
     print("\nKONFIGURASI CRF TERBAIK")
     print(best_config)
-    print(f"Best validation F1: {best_f1:.4f}")
+    print(f"Best validation exact-match span F1: {best_f1:.4f}")
 
     return (
         best_model,
         best_config,
-        best_result,
+        best_span_result,
+        best_bio_result,
         experiment_results
     )
 
 
-def save_best_model(model, config, validation_result):
-    """Menyimpan model terbaik dan metadata ke file joblib"""
+def save_best_model(model, config, validation_span_result, validation_bio_result):
     model_path = MODEL_DIR / "best_crf.joblib"
 
     joblib.dump(model, model_path)
@@ -281,6 +346,7 @@ def save_best_model(model, config, validation_result):
         "model": "CRF",
         "library": "sklearn-crfsuite",
         "config": config,
+
         "features": [
             "word.lower",
             "prefix2",
@@ -299,22 +365,123 @@ def save_best_model(model, config, validation_result):
             "EOS",
             "bias"
         ],
-        "entity_types": ENTITY_TYPES,
-        "training_label_normalization": True,
-        "validation_label_normalization": False,
-        "validation_result": validation_result,
-        "validation_f1": validation_result["micro_overall"]["f1"]
-    }
 
+        "entity_types": ENTITY_TYPES,
+        "bio_labels": BIO_LABELS,
+
+        "training_label_normalization": True,
+        "validation_label_normalization": True,
+        "test_label_normalization": True,
+
+        "selection_metric": "validation_exact_match_span_micro_f1",
+
+        "validation_span_result": validation_span_result,
+        "validation_bio_result": validation_bio_result,
+
+        "validation_span_f1":validation_span_result["micro_overall"]["f1"]
+    }
+    
     metadata_path = MODEL_DIR / "crf_metadata.joblib"
 
     joblib.dump(metadata, metadata_path)
 
-    print("\nModel terbaik berhasil disimpan")
+    print("\nModel terbaik berhasil disimpan.")
     print("Model:", model_path)
     print("Metadata:", metadata_path)
 
     return model_path, metadata_path
+
+
+def save_span_results(result, filename):
+    """Menyimpan hasil evaluasi exact-match span"""
+    output_path = RESULT_DIR / filename
+
+    fieldnames = [
+        "entity",
+        "precision",
+        "recall",
+        "f1",
+        "tp",
+        "fp",
+        "fn"
+    ]
+
+    with open(output_path, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for entity in ENTITY_TYPES + ["micro_overall"]:
+            metric = result[entity]
+
+            writer.writerow({
+                "entity": entity,
+                "precision": metric["precision"],
+                "recall": metric["recall"],
+                "f1": metric["f1"],
+                "tp": metric["tp"],
+                "fp": metric["fp"],
+                "fn": metric["fn"]
+            })
+
+    print(f"Hasil span disimpan: {output_path}")
+
+
+def save_bio_results(result, filename):
+    """Menyimpan hasil evaluasi token-level BIO."""
+    output_path = RESULT_DIR / filename
+
+    fieldnames = [
+        "label",
+        "precision",
+        "recall",
+        "f1",
+        "support"
+    ]
+
+    with open(output_path, "w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+
+        """Hasil per label"""
+        for label in BIO_LABELS:
+            if label not in result:
+                continue
+
+            metric = result[label]
+
+            writer.writerow({
+                "label": label,
+                "precision": metric["precision"],
+                "recall": metric["recall"],
+                "f1": metric["f1"],
+                "support": metric["support"]
+            })
+
+        """Hasil rata-rata"""
+        for avg_name in ["macro_avg", "weighted_avg", "micro_overall"]:
+            if avg_name not in result:
+                continue
+
+            metric = result[avg_name]
+
+            writer.writerow({
+                "label": avg_name,
+                "precision": metric["precision"],
+                "recall": metric["recall"],
+                "f1": metric["f1"],
+                "support": metric.get("support", "")
+            })
+
+        if "accuracy" in result:
+            writer.writerow({
+                "label": "accuracy",
+                "precision": "",
+                "recall": "",
+                "f1": result["accuracy"],
+                "support": ""
+            })
+
+    print(f"Hasil BIO disimpan: {output_path}")
 
 
 def load_best_model():
@@ -332,14 +499,15 @@ def load_best_model():
     return model
 
 
-def prepare_test_data(dataset):
-    """Mempersiapkan data test untuk evaluasi akhir"""
+def prepare_test_data(dataset, normalize_labels=True):
     test_masked = dataset["test_masked"]
     test_gold = dataset["test"]
 
+    """Validasi jumlah sequence"""
     if len(test_masked) != len(test_gold):
         raise ValueError("Jumlah sequence test masked dan test gold berbeda")
 
+    """Validasi kesesuaian data"""
     for idx, (masked, gold) in enumerate(zip(test_masked, test_gold)):
 
         """ID split berbeda, tetapi nomor sequence harus sama"""
@@ -353,30 +521,39 @@ def prepare_test_data(dataset):
         if masked["tokens"] != gold["tokens"]:
             raise ValueError(f"Token masked dan gold berbeda pada indeks {idx}")
 
+        """Jumlah token dan label harus sama"""
         if len(masked["tokens"]) != len(gold["labels"]):
             raise ValueError(f"Jumlah token dan label berbeda pada indeks {idx}")
 
+    """Ekstraksi fitur dari token masked"""
     X_test = [sentence2features(item["tokens"]) for item in test_masked]
 
-    y_test = [list(item["labels"]) for item in test_gold]
+    """Mengambil label gold"""
+    y_test = []
+
+    for item in test_gold:
+        labels = list(item["labels"])
+
+        """Normalisasi label jika diaktifkan"""
+        if normalize_labels:
+            labels = normalize_bio(labels)
+
+        y_test.append(labels)
 
     return X_test, y_test
 
 
-def evaluate_test(model, dataset):
-    """Melakukan evaluasi akhir pada data test"""
-    X_test, y_test = prepare_test_data(dataset)
+def evaluate_test(model, dataset, normalize_labels=True):
+    X_test, y_test = prepare_test_data(dataset, normalize_labels=normalize_labels)
 
     print("\nJumlah sequence test:", len(X_test))
     print("Jumlah token test:", sum(len(seq) for seq in X_test))
 
-    """Test tidak dinormalisasi"""
-    y_pred, test_result = predict_evaluate(model, X_test, y_test)
+    y_pred, span_result, bio_result = predict_evaluate(model, X_test, y_test)
 
     """Mengambil token dari test masked"""
     test_tokens = [item["tokens"] for item in dataset["test_masked"]]
-
-    """Mengambil ID sequence"""
+    
     test_ids = [item["id"] for item in dataset["test_masked"]]
 
     """Analisis kesalahan"""
@@ -386,53 +563,26 @@ def evaluate_test(model, dataset):
         y_pred=y_pred,
         sentence_ids=test_ids
     )
-
-    """Menampilkan ringkasan"""
+    
     print_error_summary(errors)
-
-    """Menyimpan detail kesalahan"""
+    
     save_error_analysis(errors)
 
-    print_metrics(test_result, "HASIL EVALUASI AKHIR TEST CRF")
+    """Menampilkan hasil span"""
+    print_span_metrics(span_result, "HASIL EVALUASI AKHIR TEST - EXACT-MATCH SPAN")
 
-    """Simpan hasil evaluasi test"""
-    output_path = RESULT_DIR / "test_results.csv"
+    """Menampilkan hasil BIO"""
+    print_bio_metrics(bio_result, "HASIL EVALUASI AKHIR TEST - TOKEN-LEVEL BIO")
 
-    with open(output_path, "w", newline="", encoding="utf-8") as file:
+    """Menyimpan hasil evaluasi secara terpisah"""
+    save_span_results(span_result, "test_span_results.csv")
+    save_bio_results(bio_result, "test_bio_results.csv")
 
-        writer = csv.writer(file)
-
-        writer.writerow([
-            "entity",
-            "precision",
-            "recall",
-            "f1",
-            "tp",
-            "fp",
-            "fn"
-        ])
-
-        for entity in ENTITY_TYPES + ["micro_overall"]:
-
-            metric = test_result[entity]
-
-            writer.writerow([
-                entity,
-                metric["precision"],
-                metric["recall"],
-                metric["f1"],
-                metric["tp"],
-                metric["fp"],
-                metric["fn"]
-            ])
-
-    print("\nHasil test disimpan:", output_path)
-
-    return y_pred, test_result
+    return y_pred, span_result, bio_result
 
 
 def train():
-    """Melakukan training, seleksi model, dan evaluasi akhir test"""
+    """Training, seleksi model, dan evaluasi akhir test"""
     print("\nMEMUAT DATASET")
 
     dataset = load_dataset()
@@ -440,32 +590,47 @@ def train():
     train_sentences = dataset["train"]
     val_sentences = dataset["validation"]
 
-    """Memisahkan fitur dan label untuk train dan validation"""
+    """Persiapan train"""
     print("\nPREPARE TRAIN")
 
     X_train, y_train = split_xy(train_sentences, normalize_labels=True)
 
-    """Memisahkan fitur dan label untuk validation"""
+    """Persiapan validation"""
     print("\nPREPARE VALIDATION")
 
-    X_val, y_val = split_xy(val_sentences, normalize_labels=False)
+    X_val, y_val = split_xy(val_sentences, normalize_labels=True)
 
-    """Melakukan eksperimen dengan berbagai konfigurasi dan memilih model terbaik berdasarkan F1 score pada validation"""
-    best_model, best_config, best_result, results = (select_best_model(X_train, y_train, X_val, y_val))
+    """Eksperimen dan seleksi model"""
+    (best_model, 
+     best_config, 
+     best_span_result, 
+     best_bio_result, 
+     results
+     ) = select_best_model(X_train, y_train, X_val, y_val)
 
-    """Menyimpan model terbaik dan metadata ke file joblib"""
-    save_best_model(best_model, best_config, best_result)
+    """Menyimpan model terbaik dan kedua hasil validation"""
+    save_best_model(
+        best_model,
+        best_config,
+        best_span_result,
+        best_bio_result
+    )
 
-
-    """Load model terbaik dari file joblib"""
+    """Memuat model terbaik"""
     loaded_model = load_best_model()
 
-    """Melakukan evaluasi akhir pada data test"""
-    y_test_pred, test_result = evaluate_test(loaded_model, dataset)
+    """Evaluasi akhir pada test"""
+    y_test_pred, test_span_result, test_bio_result = evaluate_test(loaded_model, dataset)
 
-    return loaded_model, best_result, test_result
+    return (
+        loaded_model,
+        best_span_result,
+        best_bio_result,
+        test_span_result,
+        test_bio_result
+    )
 
 
 if __name__ == "__main__":
-
+    
     train()
